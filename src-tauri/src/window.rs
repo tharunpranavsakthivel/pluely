@@ -85,8 +85,11 @@ pub fn set_window_height(window: tauri::WebviewWindow, height: u32) -> Result<()
 
 #[tauri::command]
 pub fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
+    println!("open_dashboard called");
+    
     // Check if dashboard window already exists
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+        println!("Dashboard window exists, showing and focusing");
         // Window exists, just focus and show it
         dashboard_window
             .set_focus()
@@ -94,10 +97,23 @@ pub fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
         dashboard_window
             .show()
             .map_err(|e| format!("Failed to show dashboard window: {}", e))?;
+        dashboard_window
+            .unminimize()
+            .map_err(|e| format!("Failed to unminimize dashboard window: {}", e))?;
     } else {
+        println!("Creating new dashboard window");
         // Window doesn't exist, create it with platform-aware defaults
-        create_dashboard_window(&app)
+        let window = create_dashboard_window(&app)
             .map_err(|e| format!("Failed to create dashboard window: {}", e))?;
+        println!("Dashboard window created successfully");
+        
+        // Ensure it's visible and focused
+        window
+            .show()
+            .map_err(|e| format!("Failed to show new dashboard window: {}", e))?;
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus new dashboard window: {}", e))?;
     }
 
     Ok(())
@@ -166,8 +182,10 @@ pub fn move_window(app: tauri::AppHandle, direction: String, step: i32) -> Resul
 pub fn create_dashboard_window<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebviewWindow<R>, tauri::Error> {
+    println!("Creating dashboard window with /dashboard route");
+    
     let base_builder =
-        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/chats".into()));
+        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/dashboard".into()));
 
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
@@ -180,6 +198,8 @@ pub fn create_dashboard_window<R: Runtime>(
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .content_protected(true)
         .visible(true)
+        .focused(true)
+        .always_on_top(false)
         .traffic_light_position(LogicalPosition::new(14.0, 18.0));
 
     #[cfg(not(target_os = "macos"))]
@@ -187,10 +207,14 @@ pub fn create_dashboard_window<R: Runtime>(
         .title("Pluely - Dashboard")
         .center()
         .decorations(true)
-        .inner_size(800.0, 600.0)
+        .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
         .content_protected(true)
-        .visible(true);
+        .visible(true)
+        .focused(true)
+        .always_on_top(false);
 
-    base_builder.build()
+    let window = base_builder.build()?;
+    println!("Dashboard window built successfully");
+    Ok(window)
 }

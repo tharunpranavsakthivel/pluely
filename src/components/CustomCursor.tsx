@@ -27,7 +27,17 @@ export const CustomCursor = () => {
       }
     };
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = (e: MouseEvent) => {
+      // Prevent hiding if the mouse is still within the window (e.g. while typing)
+      if (
+        e.clientX > 0 &&
+        e.clientX < window.innerWidth &&
+        e.clientY > 0 &&
+        e.clientY < window.innerHeight
+      ) {
+        return;
+      }
+
       isVisibleRef.current = false;
       if (cursorRef.current) {
         cursorRef.current.style.opacity = "0";
@@ -37,7 +47,16 @@ export const CustomCursor = () => {
     const handleWindowBlur = () => {
       isVisibleRef.current = false;
       if (cursorRef.current) {
-        cursorRef.current.style.display = "0";
+        cursorRef.current.style.opacity = "0";
+      }
+    };
+
+    const handleKeyDown = () => {
+      if (!isVisibleRef.current) {
+        isVisibleRef.current = true;
+        if (cursorRef.current) {
+          cursorRef.current.style.opacity = "1";
+        }
       }
     };
 
@@ -47,11 +66,13 @@ export const CustomCursor = () => {
     // Add event listeners
     document.addEventListener("mousemove", handleMouseMove, { passive: true });
     document.addEventListener("mouseleave", handleMouseLeave);
+    document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("blur", handleWindowBlur);
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseleave", handleMouseLeave);
+      document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("blur", handleWindowBlur);
       cancelAnimationFrame(rafId);
     };

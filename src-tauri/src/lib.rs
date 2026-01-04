@@ -101,7 +101,7 @@ pub fn run() {
             api::chat_stream_response,
             api::fetch_models,
             api::create_system_prompt,
-            api::check_license_status,
+            activate::check_license_status,
             api::get_activity,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,

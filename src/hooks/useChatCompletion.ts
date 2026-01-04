@@ -542,68 +542,69 @@ export const useChatCompletion = (
     try {
       // Check screen recording permission on macOS
       const platform = navigator.platform.toLowerCase();
-      if (platform.includes("mac") && !hasCheckedPermissionRef.current) {
-        const {
-          checkScreenRecordingPermission,
-          requestScreenRecordingPermission,
-        } = await import("tauri-plugin-macos-permissions-api");
+      if (platform.includes("mac")) {
+        try {
+          const {
+            checkScreenRecordingPermission,
+            requestScreenRecordingPermission,
+          } = await import("tauri-plugin-macos-permissions-api");
 
-        const hasPermission = await checkScreenRecordingPermission();
+          const hasPermission = await checkScreenRecordingPermission();
+          console.log("Initial permission check:", hasPermission);
 
-        if (!hasPermission) {
-          // Request permission
-          await requestScreenRecordingPermission();
+          if (!hasPermission) {
+            // Request permission
+            await requestScreenRecordingPermission();
 
-          // Wait a moment and check again
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+            // Wait longer for user to grant permission
+            await new Promise((resolve) => setTimeout(resolve, 3000));
 
-          const hasPermissionNow = await checkScreenRecordingPermission();
+            const hasPermissionNow = await checkScreenRecordingPermission();
+            console.log("Permission after request:", hasPermissionNow);
 
-          if (!hasPermissionNow) {
-            setState((prev) => ({
-              ...prev,
-              error:
-                "Screen Recording permission required. Please enable it by going to System Settings > Privacy & Security > Screen & System Audio Recording. If you don't see Pluely in the list, click the '+' button to add it. If it's already listed, make sure it's enabled. Then restart the app.",
-            }));
-            setIsScreenshotLoading(false);
-            screenshotInitiatedByThisContext.current = false;
-            return;
+            if (!hasPermissionNow) {
+              setState((prev) => ({
+                ...prev,
+                error:
+                  "Screen Recording permission required. Please enable it in System Settings > Privacy & Security > Screen & System Audio Recording, then restart Pluely.",
+              }));
+              setIsScreenshotLoading(false);
+              screenshotInitiatedByThisContext.current = false;
+              return;
+            }
           }
+          hasCheckedPermissionRef.current = true;
+        } catch (permError) {
+          console.error("Permission check error:", permError);
+          // Continue anyway - user might have granted permission previously
         }
-        hasCheckedPermissionRef.current = true;
       }
 
       if (config.enabled) {
+        console.log("Attempting screenshot capture with mode:", config.mode);
         const base64 = await invoke("capture_to_base64");
+        console.log("Screenshot captured successfully, size:", (base64 as string).length);
 
         if (config.mode === "auto") {
-          // Auto mode: Submit directly to AI with the configured prompt
           await handleScreenshotSubmit(base64 as string, config.autoPrompt);
         } else if (config.mode === "manual") {
-          // Manual mode: Add to attached files without prompt
           await handleScreenshotSubmit(base64 as string);
         }
-        // Reset flag after processing
         screenshotInitiatedByThisContext.current = false;
       } else {
-        // Selection Mode: Open overlay to select an area
-        // Only allow if user has active license
-        if (!hasActiveLicense) {
-          setState((prev) => ({
-            ...prev,
-            error: "Selection mode requires an active license",
-          }));
-          setIsScreenshotLoading(false);
-          screenshotInitiatedByThisContext.current = false;
-          return;
-        }
+        // Selection Mode
         isProcessingScreenshotRef.current = false;
+        console.log("Starting screen capture overlay...");
         await invoke("start_screen_capture");
       }
     } catch (error) {
+      console.error("Screenshot error details:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Error type:", typeof error, "Error:", errorMessage);
+      
       setState((prev) => ({
         ...prev,
-        error: "Failed to capture screenshot. Please try again.",
+        error: `Failed to capture screenshot: ${errorMessage}. Please try restarting the app or check System Settings > Privacy & Security > Screen Recording.`,
       }));
       isProcessingScreenshotRef.current = false;
       screenshotInitiatedByThisContext.current = false;
@@ -612,7 +613,7 @@ export const useChatCompletion = (
         setIsScreenshotLoading(false);
       }
     }
-  }, [handleScreenshotSubmit, hasActiveLicense]);
+  }, [handleScreenshotSubmit]);
 
   useEffect(() => {
     let unlisten: any;

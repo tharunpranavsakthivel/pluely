@@ -101,9 +101,9 @@ async function* fetchPluelyAIResponse(params: {
 
       // Start the streaming request using the new API response endpoint
       await invoke("chat_stream_response", {
-        userMessage,
-        systemPrompt,
-        imageBase64,
+        user_message: userMessage,
+        system_prompt: systemPrompt,
+        image_base64: imageBase64,
         history: historyString,
       });
 

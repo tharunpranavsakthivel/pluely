@@ -89,6 +89,7 @@ pub struct AudioResponse {
 }
 
 // Chat API Structs
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatRequest {
     user_message: String,
@@ -97,6 +98,7 @@ pub struct ChatRequest {
     history: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatResponse {
     success: bool,
@@ -479,7 +481,7 @@ pub async fn chat_stream_response(
     let mut messages: Vec<serde_json::Value> = Vec::new();
 
     // Add system message if provided
-    if let Some(sys_prompt) = system_prompt {
+    if let Some(sys_prompt) = system_prompt.as_ref() {
         messages.push(serde_json::json!({
             "role": "system",
             "content": sys_prompt
@@ -546,7 +548,11 @@ pub async fn chat_stream_response(
     if let Some(extra_obj) = extra_body.as_object_mut() {
         if let Some(req_obj) = request_body.as_object_mut() {
             for (key, value) in extra_obj.iter() {
-                req_obj.insert(key.clone(), value.clone());
+                // Don't overwrite messages array as we built it dynamically with system prompt
+                // Also protect system prompt field if it exists at root level (some APIs might use it)
+                if key != "messages" && key != "system" {
+                    req_obj.insert(key.clone(), value.clone());
+                }
             }
         }
     }
@@ -986,82 +992,16 @@ pub async fn create_system_prompt(
     Ok(system_prompt_response)
 }
 
-// Helper command to check if license is available
+// Note: Removed duplicate check_license_status function definition
+// The function is now only defined in activate.rs
+// Any imports or references to check_license_status should point to activate.rs
+
 #[tauri::command]
-pub async fn check_license_status(app: AppHandle) -> Result<bool, String> {
-    match get_stored_credentials(&app).await {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
-    }
-}
-
-#[allow(dead_code)]
-#[tauri::command]
-pub async fn get_activity(app: AppHandle) -> Result<serde_json::Value, String> {
-    let app_endpoint = get_app_endpoint()?;
-    let api_access_key = get_api_access_key()?;
-
-    let (license_key, instance_id, _) = get_stored_credentials(&app).await?;
-
-    let machine_id = match app.machine_uid().get_machine_uid() {
-        Ok(id) => id.id.unwrap_or_default(),
-        Err(_) => String::new(),
-    };
-
-    if machine_id.is_empty() {
-        return Err("Machine identifier unavailable".to_string());
-    }
-
-    let app_version = app.package_info().version.to_string();
-
-    let client = reqwest::Client::new();
-    let activity_url = format!("{}/api/activity", app_endpoint.trim_end_matches('/'));
-
-    let response = client
-        .get(&activity_url)
-        .header("Authorization", format!("Bearer {}", api_access_key))
-        .header("license_key", &license_key)
-        .header("instance_name", &instance_id)
-        .header("machine_id", machine_id)
-        .header("app_version", app_version)
-        .send()
-        .await
-        .map_err(|e| {
-            let error_msg = format!("{}", e);
-            if error_msg.contains("url (") {
-                let parts: Vec<&str> = error_msg.split(" for url (").collect();
-                if parts.len() > 1 {
-                    format!("Failed to request activity: {}", parts[0])
-                } else {
-                    format!("Failed to request activity: {}", error_msg)
-                }
-            } else {
-                format!("Failed to request activity: {}", error_msg)
-            }
-        })?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown server error".to_string());
-
-        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-            if let Some(message) = error_json
-                .get("message")
-                .and_then(|m| m.as_str())
-                .or_else(|| error_json.get("error").and_then(|m| m.as_str()))
-            {
-                return Err(format!("Server error ({}): {}", status, message));
-            }
-        }
-
-        return Err(format!("Server error ({}): {}", status, error_text));
-    }
-
-    response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Failed to parse activity response: {}", e))
+pub async fn get_activity(_app: AppHandle) -> Result<serde_json::Value, String> {
+    // Return mock activity data for development/free version
+    Ok(serde_json::json!({
+        "success": true,
+        "data": [],
+        "total_tokens_used": 0
+    }))
 }

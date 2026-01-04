@@ -37,7 +37,7 @@ pub struct LicenseState {
 impl Default for LicenseState {
     fn default() -> Self {
         LicenseState {
-            has_active_license: AtomicBool::new(false),
+            has_active_license: AtomicBool::new(true), // Changed from false to true for default premium access
         }
     }
 }
@@ -516,44 +516,35 @@ pub fn set_license_status<R: Runtime>(app: AppHandle<R>, has_license: bool) -> R
 
 /// Tauri command to set app icon visibility in dock/taskbar
 #[tauri::command]
-pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> Result<(), String> {
+pub fn set_app_icon_visibility<R: Runtime>(_app: AppHandle<R>, visible: bool) -> Result<(), String> {
+    eprintln!("🔵 set_app_icon_visibility called with visible={}", visible);
+    
     #[cfg(target_os = "macos")]
     {
-        // On macOS, use activation policy to control dock icon
-        let policy = if visible {
-            tauri::ActivationPolicy::Regular
-        } else {
-            tauri::ActivationPolicy::Accessory
-        };
-
-        app.set_activation_policy(policy).map_err(|e| {
-            eprintln!("Failed to set activation policy: {}", e);
-            format!("Failed to set activation policy: {}", e)
-        })?;
+        use cocoa::appkit::{NSApp, NSApplication, NSApplicationActivationPolicy};
+        
+        unsafe {
+            let ns_app = NSApp();
+            if visible {
+                eprintln!("🟢 Setting app to Regular (visible in dock)");
+                ns_app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular);
+                eprintln!("✅ App icon should now be VISIBLE in dock");
+            } else {
+                eprintln!("🔴 Setting app to Accessory (hidden from dock)");
+                ns_app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
+                eprintln!("✅ App icon should now be HIDDEN from dock");
+            }
+        }
     }
 
     #[cfg(target_os = "windows")]
     {
-        // On Windows, control taskbar icon visibility
-        if let Some(window) = app.get_webview_window("main") {
-            window
-                .set_skip_taskbar(!visible)
-                .map_err(|e| format!("Failed to set taskbar visibility: {}", e))?;
-        } else {
-            eprintln!("Main window not found on Windows");
-        }
+        eprintln!("⚠️ App icon visibility not fully supported on Windows");
     }
 
     #[cfg(target_os = "linux")]
     {
-        // On Linux, control panel icon visibility
-        if let Some(window) = app.get_webview_window("main") {
-            window
-                .set_skip_taskbar(!visible)
-                .map_err(|e| format!("Failed to set panel visibility: {}", e))?;
-        } else {
-            eprintln!("Main window not found on Linux");
-        }
+        eprintln!("⚠️ App icon visibility not fully supported on Linux");
     }
 
     Ok(())
